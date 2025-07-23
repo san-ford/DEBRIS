@@ -22,6 +22,7 @@ py -m pip install -r requirements.txt
 
 ## Populate Database
 ```bash
+python3 manage.py makemigrations
 python3 manage.py migrate
 python3 populate.py
 ```
