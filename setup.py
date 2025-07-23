@@ -10,5 +10,5 @@ else:
 
 subprocess.run([cmd, "debris/manage.py", "makemigrations"])
 subprocess.run([cmd, "debris/manage.py", "migrate"])
-subprocess.run([cmd, "debris/debris/explore/populate.py"])
+subprocess.run([cmd, "debris/populate.py"])
 subprocess.run([cmd, "debris/manage.py", "runserver"])
