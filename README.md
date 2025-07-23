@@ -4,7 +4,7 @@ The Database Exploration By Relative Image Similarity DEBRIS app allows a user t
 The retrieval algorithm uses a self-organizing map (an unsupervised machine learning algorithm) to categorize the images in the database based on the similarity of their visual features. To run the app, clone the repository and perform the following steps:
 
 ## Create Virtual Environment
-Ensure you are in the "debris" directory. To create a virtual environment for the app using conda, run the following commands
+To create a virtual environment for the app using pip, run the following commands:
 
 ### Unix/MacOS:
 ```bash
@@ -21,6 +21,7 @@ py -m pip install -r requirements.txt
 ```
 
 ## Populate Database
+Ensure you are in the "debris" directory, then run the following commands:
 ```bash
 python3 manage.py makemigrations
 python3 manage.py migrate
