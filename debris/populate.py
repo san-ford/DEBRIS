@@ -11,9 +11,9 @@ from explore.models import ImageSubmitted, ImageRetrieved
 
 
 # import images from csv file
-images = pd.read_csv("train.csv")
+images = pd.read_csv("debris/train.csv")
 # import list of image node predictions
-predictions = pd.read_csv("fashion_prediction.csv")
+predictions = pd.read_csv("debris/fashion_prediction.csv")
 
 # convert dataframes to numpy arrays
 images = np.array(images)
