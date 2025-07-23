@@ -8,7 +8,8 @@ elif sys.platform == "win32":
 else:
     raise ValueError("Operating system not compatible")
 
-subprocess.run([cmd, "debris/manage.py", "makemigrations"])
-subprocess.run([cmd, "debris/manage.py", "migrate"])
-subprocess.run([cmd, "debris/populate.py"])
-subprocess.run([cmd, "debris/manage.py", "runserver"])
+subprocess.run(["cd", "debris"])
+subprocess.run([cmd, "manage.py", "makemigrations"])
+subprocess.run([cmd, "manage.py", "migrate"])
+subprocess.run([cmd, "populate.py"])
+subprocess.run([cmd, "manage.py", "runserver"])
