@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Database Exploration By Relative Image Similarity</title>
+</head>
+<body>
+    <h3>Upload your image</h3>
+
+<div>
+  <form action="{% url 'result' %}" method="POST" enctype="multipart/form-data">
+      {% csrf_token %}
+      <input type="file" name="image" id="image">
+    <button type="submit">Submit</button>
+      <h5 style="color:red">{{error_message}}</h5>
+  </form>
+    Allowed file types: JPEG, PNG, BMP, TIFF
+</div>
+
+</body>
+</html>
