@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Result</title>
+    <title>Image Search Result</title>
 </head>
 <body>
     <h1>Your item:</h1>
@@ -15,10 +15,11 @@
             {% if each %}
                 <form action="{% url 'result' %}" method="POST" enctype="multipart/form-data">
                     {% csrf_token %}
-                    <input type="hidden" name="selection" src="{{ each }}" width="140" height="140" value="{{ each.encoded_image }}">
-                    <input type="hidden" name="node" src="{{ each }}" width="140" height="140" value="{{ each.node }}">
+                    <input type="hidden" name="selection" value="{{ each.encoded_image }}">
+                    <input type="hidden" name="node" value="{{ each.node }}">
+                    <input type="hidden" name="database" value="{{ database }}">
                     <button type="submit">
-                        <img src="{{ each.encoded_image }}" width="140" height="140">
+                        <img src="{{ each.encoded_image }}" width="140">
                     </button>
                 </form>
             {% endif %}
@@ -28,8 +29,16 @@
     {% endif %}
 
     <p>
-    <li><a href="{% url 'index' %}">Return to index page</a></li>
-    </p>
+    <form action="{% url 'index' %}" method="POST" enctype="multipart/form-data">
+        {% csrf_token %}
+        <button type="submit">Return to index page</button>
+    </form>
+    <form action="{% url 'upload' %}" method="POST" enctype="multipart/form-data">
+        {% csrf_token %}
+        <input type="hidden" name="database" value="{{ database }}">
+        <input type="hidden" name="db_created" value=True>
+        <button type="submit">Search with a new image</button>
+    </form>
 
 </body>
 </html>

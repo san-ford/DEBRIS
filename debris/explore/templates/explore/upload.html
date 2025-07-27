@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Upload Your Image Query</title>
+</head>
+<body>
+
+    <h3>Please upload an image to search with</h3>
+
+    <form action="{% url 'result' %}" method="POST" enctype="multipart/form-data">
+        {% csrf_token %}
+        <input type="hidden" name="database" value="{{ database }}">
+        <input type="file" name="image" id="image">
+        <button type="submit">Submit</button>
+    </form>
+
+    <p>
+    {% if error_message %}
+        <h5 style="color:red">{{error_message}}</h5>
+    {% endif %}
+
+    {% if accepted %}
+        <h5>Files accepted: {{ accepted }}</h5>
+    {% endif %}
+    {% if rejected %}
+        <h5>Files rejected: {{ rejected }}</h5>
+    {% endif %}
+    {% if time %}
+        <h5>Database populated successfully in {{ time }} minutes</h5>
+    {% endif %}
+
+    <p>
+    <li><a href="{% url 'index' %}">Return to index page</a></li>
+
+</body>
+</html>

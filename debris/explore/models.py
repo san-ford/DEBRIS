@@ -9,3 +9,8 @@ class ImageSubmitted(models.Model):
 class ImageRetrieved(models.Model):
     encoded_image = models.CharField(max_length=500)
     node = models.IntegerField(default=0)
+
+
+class UploadedImages(models.Model):
+    encoded_image = models.CharField(max_length=500)
+    node = models.IntegerField(default=-1)

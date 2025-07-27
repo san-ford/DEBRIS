@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Upload Your Database</title>
+
+    <h3>Please upload your custom database</h3>
+    Note: Uploading a new database will erase the existing database.
+    Upload may take a while.
+
+<p>
+    <div>
+        <form action="{% url 'create_db' %}" method="POST" enctype="multipart/form-data">
+        {% csrf_token %}
+            <input type="text" name="upload_path" id="upload_path">
+            <button type="submit">Submit</button>
+        </form>
+
+        <p>
+        Allowed file types: JPEG, PNG, BMP, TIFF
+        </p>
+
+        <h5 style="color:red">{{error_message}}</h5>
+
+    </div>
+
+    <p>
+        <li><a href="{% url 'index' %}">Return to index page</a></li>
+    </p>
+
+</head>
+<body>
+
+</body>
+</html>

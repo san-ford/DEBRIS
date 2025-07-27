@@ -2,9 +2,19 @@ from PIL import Image
 from scipy import ndimage
 from sklearn_som.som import SOM
 import numpy as np
+import subprocess
+import django
 import base64
 import pickle
+import time
+import sys
 import io
+import os
+
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'debris.settings')
+django.setup()
+
+from .models import UploadedImages
 
 
 def preprocess(img):
@@ -27,8 +37,6 @@ def preprocess(img):
     img = np.array(img)
     # flatten image array
     img = np.reshape(img, 784)
-    # double array to meet prediction requirements
-    img = np.concatenate(([img], [img]))
     return img
 
 
@@ -92,8 +100,80 @@ def decode_image(img):
 
 
 # retrieve prediction from saved model
-def get_prediction(img):
+def get_prediction(img, db):
     # prepare image for mapping
-    loaded_model = pickle.load(open("model.pkl", "rb"))
+    loaded_model = pickle.load(open("data/{}/{}.pkl".format(db, db), "rb"))
     prediction = loaded_model.predict(img)
     return prediction[0]
+
+
+def populate_db(path):
+    start = time.time()
+    # validate directory path
+    if not os.path.exists(path):
+        return 0, 0, 0, "Invalid path file"
+    images = []
+    processed_images = []
+    files_accepted = 0
+    files_rejected = 0
+    time_elapsed = 0
+    allowed_file_types = ['.jpeg', '.jpg', '.png', '.bmp', '.tiff']
+
+    # retrieve and process files
+    for file in os.scandir(path):
+        # verify path leads to a file
+        if file.is_file():
+            # verify valid file type
+            _, extension = os.path.splitext(file)
+            if extension.lower() not in allowed_file_types:
+                files_rejected += 1
+                continue
+            files_accepted += 1
+            # import each image
+            img = Image.open(file.path)
+            # resize image
+            w, h = img.size
+            ratio = 140 / w
+            size = (140, int(h*ratio))
+            # store image as numpy array
+            img = img.resize(size)
+            # store each encoded image (with color)
+            images.append(encode_image(np.array(img)))
+            # store each processed image (convert to greyscale)
+            processed_images.append(preprocess(img.convert("L")))
+
+    if not files_accepted:
+        message = "No valid files in directory"
+        return files_accepted, files_rejected, time_elapsed, message
+
+    # prepare array for self-organizing map
+    processed_images = np.array(processed_images)
+    # initiate a 10x10 self-organizing map with input dimensions = 784
+    custom_som = SOM(m=10, n=10, dim=784)
+    custom_som.fit(processed_images)
+    # transform the map to organize the training data
+    custom_map = custom_som.transform(processed_images)
+    # Save model using Pickle
+    with open("data/default/default.pkl", "wb") as model_file:
+        pickle.dump(custom_som, model_file)
+    # find the closest node for each data point
+    nodes = custom_som.predict(processed_images)
+
+    # save encoded images and predicted nodes
+    for i in range(len(images)):
+        next_image = UploadedImages(encoded_image=images[i], node=nodes[i])
+        next_image.save()
+
+    message = None
+    time_elapsed = (time.time() - start) / 60
+
+    return files_accepted, files_rejected, time_elapsed, message
+
+
+def clear_db():
+    if sys.platform == "win32":
+        cmd = "py"
+    else:
+        cmd = "python3"
+
+    subprocess.run([cmd, "manage.py", "flush", "--noinput"])

@@ -1,5 +1,6 @@
 from django.contrib import admin
 
-from .models import ImageRetrieved
+from .models import UploadedImages, ImageSubmitted
 
-admin.site.register(ImageRetrieved)
+admin.site.register(UploadedImages)
+admin.site.register(ImageSubmitted)
