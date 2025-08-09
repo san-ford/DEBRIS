@@ -78,9 +78,13 @@ DATABASES = {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': BASE_DIR / 'db.sqlite3',
     },
-    'MNIST_fashion': {
+    'fashion': {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': BASE_DIR / 'fashion.sqlite3',
+    },
+    'landscapes': {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'landscapes.sqlite3',
     },
 }
 
