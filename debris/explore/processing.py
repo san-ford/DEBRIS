@@ -149,7 +149,7 @@ def retrieve(embeddings, node, database):
     # sort images by highest ranking
     ranked_images = sorted(ranked_images, key=lambda x: x[1], reverse=True)
     # top image is the same image, remove it
-    if ranked_images[0][1] >= 0.99:
+    if len(ranked_images) and ranked_images[0][1] >= 0.99:
         ranked_images.pop(0)
 
     # specify number up to 7 of the top images to display
