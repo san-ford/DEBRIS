@@ -1,7 +1,9 @@
 # DEBRIS
-The Database Exploration By Relative Image Similarity (DEBRIS) app allows a user to upload an image to retrieve related images from a chosen database. The user can choose from either the MNIST fashion dataset, or from a database created from images uploaded by the user. Future versions of the app will allow a selection from other databases. This app is built on the SOM fashion project located here: https://github.com/san-ford/SOM_fashion.
+The Database Exploration By Relative Image Similarity (DEBRIS) app allows a user to browse a database by image similarity. Uploading an image will retrieve 10 similar images from a chosen database. The user can continue browsing by selecting one of the 10 images, which will retrieve another 10 images similar to the selection.
 
-The retrieval algorithm uses a self-organizing map (an unsupervised machine learning algorithm) to categorize the images in the database based on the similarity of their visual features. To run the app, clone the repository and perform the following steps:
+The user may choose to browse a custom database by uploading their own dataset of images. The images require no labeling or preprocessing, since an unsupervised machine learning algorithm is used to structure the databases. Two example databases may also be browsed: Lanscapes and Fashion (built from an H&M catalogue).
+
+When uploading a dataset of images, each object is run through a feature extraction pipeline to retrieve vector embeddings for each image. The embeddings are then organized by a self-organzing map, which structures the clusters of similar images in a way that facilitates more efficient retrieval. 
 
 ## Create Virtual Environment
 To create a virtual environment for the app using pip, run the following commands in the project directory:
