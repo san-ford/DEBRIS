@@ -16,18 +16,14 @@
     </form>
 
     <p>
+    Allowed file types: JPEG, PNG, BMP, TIFF
+
+    <p>
     {% if error_message %}
         <h5 style="color:red">{{error_message}}</h5>
     {% endif %}
-
-    {% if accepted %}
-        <h5>Files accepted: {{ accepted }}</h5>
-    {% endif %}
-    {% if rejected %}
-        <h5>Files rejected: {{ rejected }}</h5>
-    {% endif %}
-    {% if time %}
-        <h5>Database populated successfully in {{ time }} minutes</h5>
+    {% if som %}
+        {{ som }}
     {% endif %}
 
     <p>

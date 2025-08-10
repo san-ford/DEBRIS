@@ -4,29 +4,103 @@
     <meta charset="UTF-8">
     <title>Upload Your Database</title>
 
-    <h3>Please upload your custom database</h3>
+    <h3>Option 1: Upload a custom database</h3>
     Note: Uploading a new database will erase the existing database.
     Upload may take a while.
 
 <p>
-    <div>
-        <form action="{% url 'create_db' %}" method="POST" enctype="multipart/form-data">
+    <input type="file" id="fileInput" multiple>
+    <button onclick="startUpload()">Upload</button>
+
+    <p>
+    Allowed file types: JPEG, PNG, BMP, TIFF
+
+    <h5 style="color:red">{{error_message}}</h5>
+
+    <div id="status"></div>
+        <script>
+            async function startUpload() {
+                // get form data
+                const input = document.getElementById('fileInput');
+                const files = Array.from(input.files);
+                // function variables
+                const batchSize = 100;
+                const status = document.getElementById('status');
+                let rejected = 0;
+
+                for (let i = 0; i < files.length; i += batchSize) {
+                    // create new form with each batch
+                    const formData = new FormData();
+                    const chunk = files.slice(i, i + batchSize);
+                    chunk.forEach(file => formData.append('files', file));
+
+                    // keep track of number of files sent
+                    formData.append('file_number', i);
+
+                    try {
+                        // send form to views.py
+                        const res = await fetch('../create_db/', {
+                            method: 'POST',
+                            body: formData,
+                        });
+
+                        // retrieve data from views.py
+                        const data = await res.json();
+                        // update count of rejected files
+                        rejected = rejected + data.files_rejected;
+                        status.innerText = `Uploaded ${i + chunk.length - rejected} of ${files.length} files. ${rejected} files rejected.`;
+                    } catch (err) {
+                        console.error("Upload failed", err);
+                        status.innerText = `Error uploading batch starting at index ${i}. Please try again.`;
+                        return;
+                    }
+                }
+
+
+                // Create self-organizing map after files uploaded
+                const formData = new FormData();
+                formData.append('som', "True");
+
+                try {
+                        // send form to views.py
+                        const res = await fetch('../create_db/', {
+                            method: 'POST',
+                            body: formData,
+                        });
+
+                        // retrieve data from views.py
+                        const data = await res.json();
+                        status.innerText = `${data.som_status}`;
+                    } catch (err) {
+                        console.error("Upload failed", err);
+                        status.innerText = `Error creating self-organizing map. ${files.length - rejected} files uploaded, ${rejected} files rejected.`;
+                        return;
+                    }
+
+                // redirect to upload page
+                window.location.href = '../upload/';
+            }
+        </script>
+
+        <p>
+        <h3>Option 2: Reorganize the self-organizing map of the custom database</h3>
+        <form action="{% url 'upload' %}" method="POST" enctype="multipart/form-data">
         {% csrf_token %}
-            <input type="text" name="upload_path" id="upload_path">
-            <button type="submit">Submit</button>
+            <input type="hidden" name="som" value=True>
+            <button type="submit">Reorganize the SOM</button>
         </form>
 
         <p>
-        Allowed file types: JPEG, PNG, BMP, TIFF
-        </p>
+        <h3>Option 3: Upload an image to browse the existing custom database</h3>
+        <form action="{% url 'upload' %}" method="POST" enctype="multipart/form-data">
+        {% csrf_token %}
+            <button type="submit">Go to image upload page</button>
+        </form>
 
-        <h5 style="color:red">{{error_message}}</h5>
+        <p>
+        <li><a href="{% url 'index' %}">Return to index page</a></li>
 
     </div>
-
-    <p>
-        <li><a href="{% url 'index' %}">Return to index page</a></li>
-    </p>
 
 </head>
 <body>

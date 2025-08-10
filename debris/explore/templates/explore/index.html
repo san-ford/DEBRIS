@@ -15,14 +15,14 @@
         {% csrf_token %}
             <label for="database">Choose a database to search</label>
             <select name="database" id="database">
-                <option value="MNIST_fashion">MNIST fashion</option>
+                <option value="landscapes">Landscapes</option>
+                <option value="fashion">Fashion</option>
                 <option value="default">Custom (upload)</option>
             </select>
 
             <button type="submit">Submit</button>
             <h5 style="color:red">{{error_message}}</h5>
         </form>
-        Allowed file types: JPEG, PNG, BMP, TIFF
     </div>
 
 </body>

@@ -1,15 +1,15 @@
-from PIL import Image
-from scipy import ndimage
+from transformers import AutoImageProcessor, AutoModel
+from accelerate.test_utils.testing import get_backend
+from torch.nn.functional import cosine_similarity
 from sklearn_som.som import SOM
+from django.db.models import Q
+from PIL import Image
 import numpy as np
+import django, base64, pickle
+import sys, io, os
 import subprocess
-import django
-import base64
-import pickle
-import time
-import sys
-import io
-import os
+import random
+import torch
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'debris.settings')
 django.setup()
@@ -17,73 +17,29 @@ django.setup()
 from .models import UploadedImages
 
 
-def preprocess(img):
-    # edge detection (subtract Gaussian blurred image from original)
-    img = img - ndimage.gaussian_filter(img, 3)
-    # center object
-    img = center_object(img)
-    # convert back to Image object
-    img = Image.fromarray(img)
+def preprocess(image, db):
+    # prepare feature extraction variables
+    DEVICE, _, _ = get_backend()
+    # retrieve pre-loaded models
+    processor = pickle.load(open("data/{}/processor.pkl".format(db), "rb"))
+    model = pickle.load(open("data/{}/model.pkl".format(db), "rb"))
 
-    # make image square
-    w, h = img.size
-    if w > h:
-        h = w
-    else:
-        w = h
-    img = img.resize((w, h))
-    # scale image
-    img.thumbnail((28, 28))
-    img = np.array(img)
-    # flatten image array
-    img = np.reshape(img, 784)
-    return img
+    # retrieve image
+    img = Image.open(image).convert("RGB")
+    encoded_image = encode_image(np.array(img))
+    # create embeddings for image
+    emb = processor(img, return_tensors="pt").to(DEVICE)
+    emb = model.to(DEVICE)(**emb).pooler_output
+    # store image embeddings as numpy array
+    embeddings = emb.cpu().detach().numpy()[0]
 
+    # retrieve node prediction
+    node = get_prediction(embeddings, db)
 
-def center_object(img):
-    # find center of mass
-    y_center, x_center = ndimage.center_of_mass(img)
-    y_center = int(y_center)
-    x_center = int(x_center)
-
-    # determine distances from center of mass to edge of image
-    y_dist_to_edge = min(y_center, len(img) - y_center)
-    x_dist_to_edge = min(x_center, len(img[0]) - x_center)
-    dist_to_edge = max(y_dist_to_edge, x_dist_to_edge)
-
-    # zero padding
-    if x_dist_to_edge > y_dist_to_edge:
-        # if overhang is on top
-        if y_center - x_dist_to_edge < 0:
-            overhang = x_dist_to_edge - y_center
-            # zero pad on top
-            img = np.append([[0] * len(img[0])] * overhang, img, axis=0)
-            # move y center after padding on top
-            y_center += overhang
-        # else overhang is on bottom
-        else:
-            overhang = x_dist_to_edge - y_dist_to_edge
-            # zero pad on bottom
-            img = np.append(img, [[0] * len(img[0])] * overhang, axis=0)
-    if y_dist_to_edge > x_dist_to_edge:
-        # if overhang is on left
-        if x_center - y_dist_to_edge < 0:
-            overhang = y_dist_to_edge - x_center
-            # zero pad on left
-            img = np.append([[0] * overhang] * len(img), img, axis=1)
-            # move x center after padding on left
-            x_center += overhang
-        # else overhang is on right
-        else:
-            overhang = y_dist_to_edge - x_dist_to_edge
-            # zero pad on right
-            img = np.append(img, [[0] * overhang] * len(img), axis=1)
-
-    # crop image as square
-    img = img[y_center - dist_to_edge:y_center + dist_to_edge, x_center - dist_to_edge:x_center + dist_to_edge]
-    return img.astype(np.uint8)
+    return embeddings, encoded_image, node
 
 
+# encode image for HTML view
 def encode_image(img):
     img = Image.fromarray(img.astype("uint8"))
     raw_bytes = io.BytesIO()
@@ -92,88 +48,157 @@ def encode_image(img):
     return encoded_image
 
 
-def decode_image(img):
-    base64_decoded = base64.b64decode(img[21:])
-    decoded_image = Image.open(io.BytesIO(base64_decoded))
-    decoded_image = np.array(decoded_image)
-    return decoded_image
-
-
 # retrieve prediction from saved model
 def get_prediction(img, db):
+    # double array to meet prediction algorithm requirements
+    img = np.concatenate(([img], [img]))
     # prepare image for mapping
     loaded_model = pickle.load(open("data/{}/{}.pkl".format(db, db), "rb"))
     prediction = loaded_model.predict(img)
     return prediction[0]
 
 
-def populate_db(path):
-    start = time.time()
-    # validate directory path
-    if not os.path.exists(path):
-        return 0, 0, 0, "Invalid path file"
-    images = []
-    processed_images = []
-    files_accepted = 0
-    files_rejected = 0
-    time_elapsed = 0
-    allowed_file_types = ['.jpeg', '.jpg', '.png', '.bmp', '.tiff']
-
-    # retrieve and process files
-    for file in os.scandir(path):
-        # verify path leads to a file
-        if file.is_file():
-            # verify valid file type
-            _, extension = os.path.splitext(file)
-            if extension.lower() not in allowed_file_types:
-                files_rejected += 1
-                continue
-            files_accepted += 1
-            # import each image
-            img = Image.open(file.path)
-            # resize image
-            w, h = img.size
-            ratio = 140 / w
-            size = (140, int(h*ratio))
-            # store image as numpy array
-            img = img.resize(size)
-            # store each encoded image (with color)
-            images.append(encode_image(np.array(img)))
-            # store each processed image (convert to greyscale)
-            processed_images.append(preprocess(img.convert("L")))
-
-    if not files_accepted:
-        message = "No valid files in directory"
-        return files_accepted, files_rejected, time_elapsed, message
-
-    # prepare array for self-organizing map
-    processed_images = np.array(processed_images)
-    # initiate a 10x10 self-organizing map with input dimensions = 784
-    custom_som = SOM(m=10, n=10, dim=784)
-    custom_som.fit(processed_images)
-    # transform the map to organize the training data
-    custom_map = custom_som.transform(processed_images)
-    # Save model using Pickle
-    with open("data/default/default.pkl", "wb") as model_file:
-        pickle.dump(custom_som, model_file)
-    # find the closest node for each data point
-    nodes = custom_som.predict(processed_images)
-
-    # save encoded images and predicted nodes
-    for i in range(len(images)):
-        next_image = UploadedImages(encoded_image=images[i], node=nodes[i])
-        next_image.save()
-
-    message = None
-    time_elapsed = (time.time() - start) / 60
-
-    return files_accepted, files_rejected, time_elapsed, message
-
-
-def clear_db():
+def clear_db(database="default"):
     if sys.platform == "win32":
         cmd = "py"
     else:
         cmd = "python3"
 
-    subprocess.run([cmd, "manage.py", "flush", "--noinput"])
+    subprocess.run([cmd, "manage.py", "flush", "--noinput", "--database={}".format(database)])
+
+    return
+
+
+def populate_db(files, database="default"):
+    allowed_file_types = ['image/jpeg', 'image/png', 'image/bmp', 'image/tiff']
+
+    # prepare feature extraction variables
+    DEVICE, _, _ = get_backend()
+    # retrieve pre-loaded models
+    processor = pickle.load(open("data/{}/processor.pkl".format(database), "rb"))
+    model = pickle.load(open("data/{}/model.pkl".format(database), "rb"))
+
+    # keep track of rejected files
+    rejected = 0
+
+    # retrieve each file
+    for f in files:
+        # verify image type
+        if f.content_type not in allowed_file_types:
+            rejected += 1
+            continue
+
+        # retrieve image file
+        img = Image.open(f).convert("RGB")
+        # create embeddings for image
+        emb = processor(img, return_tensors="pt").to(DEVICE)
+        emb = model.to(DEVICE)(**emb).pooler_output
+        # convert embeddings to python list
+        emb = emb.tolist()[0]
+        # resize image
+        w, h = img.size
+        ratio = 200 / w
+        size = (200, int(h*ratio))
+        # store image as numpy array
+        img = img.resize(size)
+        # save encoded image and embeddings to database
+        next_image = UploadedImages(encoded_image=encode_image(np.array(img)),
+                                    embeddings=emb)
+        next_image.save(using=database)
+
+    return rejected
+
+
+def create_som(database="default"):
+    # retrieve embeddings from database
+    embeddings = []
+    images = UploadedImages.objects.using(database).all()
+    for i in images:
+        embeddings.append(i.embeddings)
+    embeddings = np.array(embeddings)
+    # initiate a 10x10 self-organizing map with input dimensions = 768
+    custom_som = SOM(m=10, n=10, dim=768)
+    custom_som.fit(embeddings)
+    # transform the map to organize the training data
+    custom_map = custom_som.transform(embeddings)
+    # Save model using Pickle
+    with open("data/{}/{}.pkl".format(database, database), "wb") as model_file:
+        pickle.dump(custom_som, model_file)
+    # find the closest node for each data point
+    nodes = custom_som.predict(embeddings)
+
+    # save predicted nodes to database
+    for i in range(len(images)):
+        next_image = images[i]
+        next_image.node = nodes[i]
+        next_image.save(using=database)
+    return "SOM created"
+
+
+def retrieve(embeddings, node, database):
+    embeddings = np.array(embeddings)
+    # retrieve images from database related to submitted image
+    retrieved_images = UploadedImages.objects.using(database).filter(node__exact=node)
+    # determine similarity score for each retrieved image
+    ranked_images = []
+    for i in range(len(retrieved_images)):
+        similarity_score = cosine_similarity(torch.Tensor(embeddings.tolist()),
+                                             torch.Tensor(retrieved_images[i].embeddings), dim=0)
+        ranked_images.append([retrieved_images[i], float(similarity_score)])
+
+    # sort images by highest ranking
+    ranked_images = sorted(ranked_images, key=lambda x: x[1], reverse=True)
+    # top image is the same image, remove it
+    if ranked_images[0][1] >= 0.99:
+        ranked_images.pop(0)
+
+    # specify number up to 7 of the top images to display
+    node_sample_size = min(7, len(ranked_images))
+    related_images = []
+    for i in range(node_sample_size):
+        related_images.append(ranked_images[i][0])
+
+    # determine neighboring nodes
+    neighbor_nodes = [-1] * 4
+    if node > 10:
+        neighbor_nodes[0] = node - 10
+    if node < 91:
+        neighbor_nodes[1] = node + 10
+    if node % 10 != 1:
+        neighbor_nodes[2] = node - 1
+    if node % 10 != 0:
+        neighbor_nodes[3] = node + 1
+
+    # retrieve images from neighboring nodes
+    neighbor_images = UploadedImages.objects.using(database).filter(
+        Q(node__exact=neighbor_nodes[0]) |
+        Q(node__exact=neighbor_nodes[1]) |
+        Q(node__exact=neighbor_nodes[2]) |
+        Q(node__exact=neighbor_nodes[3])
+    )
+
+    # determine number of neighbor images to retrieve
+    neighbor_sample_size = min(10 - len(related_images), len(neighbor_images))
+
+    # retrieve neighboring images
+    for i in range(neighbor_sample_size):
+        candidate = random.choice(neighbor_images)
+        while candidate in related_images:
+            candidate = random.choice(neighbor_images)
+        related_images.append(candidate)
+
+    return related_images
+
+
+def create_model(database="default"):
+    # prepare feature extraction variables
+    DEVICE, _, _ = get_backend()
+    processor = AutoImageProcessor.from_pretrained("google/vit-base-patch16-224")
+    model = AutoModel.from_pretrained("google/vit-base-patch16-224")
+
+    with open("data/{}/processor.pkl".format(database), "wb") as model_file:
+        pickle.dump(processor, model_file)
+
+    with open("data/{}/model.pkl".format(database), "wb") as model_file:
+        pickle.dump(model, model_file)
+    return

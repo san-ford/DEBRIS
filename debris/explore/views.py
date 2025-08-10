@@ -1,45 +1,41 @@
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
 from django.shortcuts import render
-from django.db.models import Q
-from .models import ImageSubmitted, UploadedImages
-from .processing import (encode_image, decode_image, preprocess,
-                         get_prediction, populate_db, clear_db)
-import numpy as np
-from PIL import Image
-import random
+from .processing import preprocess, clear_db, populate_db, create_som, retrieve, create_model
+import json
 
 
+@csrf_exempt
 def index(request):
     return render(request, "explore/index.html")
 
 
+@csrf_exempt
 def create_db(request):
-    # verify POST request
+    # verify post request
     if request.method == 'POST':
-        # verify upload path provided
-        if 'upload_path' in request.POST:
-            # clear existing database
-            clear_db()
-            path = request.POST['upload_path']
-            # populate database
-            acc, rej, t, error_message = populate_db(path)
-            # input verification
-            if error_message:
-                context = {"error_message": error_message}
-                return render(request, "explore/create_db.html", context)
-            # if database population was successful
-            context = {"database": "default",
-                       "accepted": acc,
-                       "rejected": rej,
-                       "time": t}
-            return render(request, "explore/upload.html", context)
-        else:
-            context = {"error_message": "No directory selected"}
-            return render(request, "explore/create_db.html", context)
-    else:
-        context = {"error_message": "No directory selected"}
-        return render(request, "explore/create_db.html", context)
+        # retrieve batch of files
+        if request.FILES:
+            uploaded_files = request.FILES.getlist('files')
+
+        if 'som' in request.POST.dict():
+            status = create_som()
+            return JsonResponse({"som_status": status})
+
+        # clear default database and initialize ML model on first run
+        if 'file_number' in request.POST.dict():
+            if request.POST.get('file_number') == '0':
+                clear_db()
+                create_model()
+
+        # populate database with batch
+        rejected = populate_db(uploaded_files)
+        return JsonResponse({'status': 'chunk_received',
+                             'files_rejected': rejected})
+    return render(request, "explore/create_db.html")
 
 
+@csrf_exempt
 def upload(request):
     # verify POST request
     if request.method == 'POST':
@@ -54,12 +50,19 @@ def upload(request):
             # otherwise, prompt user to upload an image query
             context = {"database": database}
             return render(request, "explore/upload.html", context)
+        # if self-organizing map needs to be created
+        elif "som" in request.POST.dict():
+            som = create_som()
+            context = {"database": "default", "som": som}
+            return render(request, "explore/upload.html", context)
         else:
-            context = {"error_message": "No database specified"}
-            return render(request, "explore/index.html", context)
-    # return to index if no POST request
+            som = "SOM not reorganized"
+            context = {"database": "default", "som": som}
+            return render(request, "explore/upload.html", context)
+    # if no POST requested, use default database
     else:
-        return render(request, "explore/index.html")
+        context = {"database": "default"}
+        return render(request, "explore/upload.html", context)
 
 
 def result(request):
@@ -79,19 +82,15 @@ def result(request):
             # verify selection is valid
             if "selection" in content:
                 # define image submitted as image selected (already encoded)
-                image_submitted = ImageSubmitted(submission=content["selection"])
+                encoded_image = content["selection"]
                 # retrieve node from selected image
-                if "node" in content:
-                    image_submitted.node = int(content["node"])
-                # if the node is not retrieved, predict it
+                if "node" in content and "embeddings" in content:
+                    node = json.loads(content["node"])
+                    embeddings = json.loads(content["embeddings"])
+                # error if the node is not retrieved
                 else:
-                    processed_image = decode_image(image_submitted)
-                    # flatten image array
-                    processed_image = np.reshape(processed_image, 784)
-                    # double array to meet prediction requirements
-                    processed_image = np.concatenate(([processed_image], [processed_image]))
-                    # retrieve prediction from submitted image
-                    image_submitted.node = get_prediction(processed_image, database)
+                    context = {"error_message": "Invalid selection."}
+                    return render(request, "explore/index.html", context)
             else:
                 context = {"error_message": "Invalid selection."}
                 return render(request, "explore/index.html", context)
@@ -111,20 +110,8 @@ def result(request):
             if image_submitted.content_type not in allowed_file_types:
                 context = {"error_message": "Invalid file type."}
                 return render(request, "explore/upload.html", context)
-            # retrieve submitted image
-            image_submitted = Image.open(image_submitted)
-            # create greyscale version of submitted image for preprocessing
-            processed_image = image_submitted.convert("L")
-            # prepare image for result view
-            image_submitted = encode_image(np.array(image_submitted))
-            # create instance of image submitted
-            image_submitted = ImageSubmitted(submission=image_submitted)
-            # preprocess image for ML prediction
-            processed_image = preprocess(processed_image)
-            # double array to meet prediction requirements
-            processed_image = np.concatenate(([processed_image], [processed_image]))
-            # retrieve prediction from submitted image
-            image_submitted.node = get_prediction(processed_image, database)
+            # retrieve image embeddings, encoding, and predicted node
+            embeddings, encoded_image, node = preprocess(image_submitted, database)
 
         # error if no file uploaded
         else:
@@ -132,47 +119,10 @@ def result(request):
             return render(request, "explore/index.html", context)
 
         # retrieve images from database related to submitted image
-        retrieved_images = UploadedImages.objects.using(database).filter(node__exact=image_submitted.node)
-        node_sample_size = min(7, len(retrieved_images))
-        related_images = []
-        for i in range(node_sample_size):
-            candidate = random.choice(retrieved_images)
-            while candidate in related_images:
-                candidate = random.choice(retrieved_images)
-            related_images.append(candidate)
-
-        # determine neighboring nodes
-        neighbor_nodes = [-1]*4
-        node = int(image_submitted.node)
-        if node > 10:
-            neighbor_nodes[0] = node - 10
-        if node < 91:
-            neighbor_nodes[1] = node + 10
-        if node % 10 != 1:
-            neighbor_nodes[2] = node - 1
-        if node % 10 != 0:
-            neighbor_nodes[3] = node + 1
-
-        # retrieve images from neighboring nodes
-        neighbor_images = UploadedImages.objects.using(database).filter(
-            Q(node__exact=neighbor_nodes[0]) |
-            Q(node__exact=neighbor_nodes[1]) |
-            Q(node__exact=neighbor_nodes[2]) |
-            Q(node__exact=neighbor_nodes[3])
-        )
-
-        # determine number of neighbor images to retrieve
-        neighbor_sample_size = min(10 - node_sample_size, len(neighbor_images))
-
-        # retrieve neighboring images
-        for i in range(neighbor_sample_size):
-            candidate = random.choice(neighbor_images)
-            while candidate in related_images:
-                candidate = random.choice(neighbor_images)
-            related_images.append(candidate)
+        related_images = retrieve(embeddings, node, database)
 
         context = {
-            "image_submitted": image_submitted,
+            "image_submitted": encoded_image,
             "related_images": related_images,
             "database": database
         }
