@@ -113,6 +113,9 @@ def create_som(database="default"):
     # retrieve embeddings from database
     embeddings = []
     images = UploadedImages.objects.using(database).all()
+    # handle empty database
+    if not len(images):
+        return "No data to create SOM"
     for i in images:
         embeddings.append(i.embeddings)
     embeddings = np.array(embeddings)
