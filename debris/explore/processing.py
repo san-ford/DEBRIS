@@ -163,14 +163,14 @@ def retrieve(embeddings, node, database):
 
     # determine neighboring nodes
     neighbor_nodes = [-1] * 4
-    if node > 10:
+    if node >= 10:
         neighbor_nodes[0] = node - 10
-    if node < 91:
+    if node < 90:
         neighbor_nodes[1] = node + 10
-    if node % 10 != 1:
-        neighbor_nodes[2] = node - 1
+    if node % 10 != 9:
+        neighbor_nodes[2] = node + 1
     if node % 10 != 0:
-        neighbor_nodes[3] = node + 1
+        neighbor_nodes[3] = node - 1
 
     # retrieve images from neighboring nodes
     neighbor_images = UploadedImages.objects.using(database).filter(
