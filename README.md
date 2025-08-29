@@ -5,6 +5,9 @@ The user may choose to browse a custom database by uploading their own dataset o
 
 When uploading a dataset of images, each object is run through a feature extraction pipeline to retrieve vector embeddings for each image. The embeddings are then organized by a self-organzing map, which structures the clusters of similar images in a way that facilitates more efficient retrieval. 
 
+# Download
+To download and run DEBRIS, ensure that your machine is utilizing Git LFS, then clone the repository.
+
 ## Create Virtual Environment
 To create a virtual environment for the app using pip, run the following commands in the project directory:
 
